@@ -27,6 +27,7 @@ enum Machine {
     X86 = 3,
     ARM = 40,
     X86_64 = 62,
+    AARCH64 = 183,
 }
 
 struct Executable {
@@ -60,7 +61,7 @@ fn run_executable(executable: Executable, args: &Vec<String>) -> Result<(), io::
             }
         },
         ELFClass::ELFCLASS64 => match executable.machine {
-            Machine::ARM => {
+            Machine::AARCH64 => {
                 ld_suffix = "-aarch64.so.1";
                 qemu_suffix = "aarch64";
                 lib_suffix = "64";
@@ -139,13 +140,14 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
 
     match FromPrimitive::from_u16(machine_type_value) {
         Some(Machine::ARM) => machine_type = Machine::ARM,
+        Some(Machine::AARCH64) => machine_type = Machine::AARCH64,
         Some(Machine::X86) => machine_type = Machine::X86,
         Some(Machine::X86_64) => machine_type = Machine::X86_64,
         None => {
             return Err(Error::new(
                 ErrorKind::Other,
                 format!(
-                    "{} is not an ARM, x86 or x86_64 executable, machine type: {}",
+                    "{} is not an ARM, ARM64, x86 or x86_64 executable, machine type: {}",
                     executable, machine_type_value,
                 ),
             ));
