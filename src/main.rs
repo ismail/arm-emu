@@ -92,7 +92,7 @@ fn main() -> io::Result<()> {
             1 => handle_armv7(&args),
             2 => handle_aarch64(&args),
             _ => {
-                return Err(Error::new(ErrorKind::Other, "Invalid ELF class."));
+                return Err(Error::new(ErrorKind::Other, format!("Invalid ELF class {}.", v)));
             }
         },
         Err(e) => return Err(e),
