@@ -8,6 +8,12 @@ use std::process::Command;
 static ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 const ARM_MACHINE_TYPE: u16 = 40;
 
+// https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.eheader.html
+// unsigned char   e_ident[16]
+// uint16_t        e_type;
+// uint16_t        e_machine;
+const HEADER_SIZE: u8 = 16 + 2 + 2;
+
 enum ELFClass {
     ELFCLASS32 = 1,
     ELFCLASS64,
@@ -58,12 +64,8 @@ fn handle_arm(args: &Vec<String>, elf_class: ELFClass) {
 fn get_elf_class(executable: &str) -> Result<ELFClass, io::Error> {
     let f = File::open(&executable)?;
 
-    // https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.eheader.html
-    // unsigned char   e_ident[16]
-    // uint16_t        e_type;
-    // uint16_t        e_machine;
-    let mut buffer = [0; 16 + 2 + 2];
-    let mut handle = f.take(16 + 2 + 2);
+    let mut buffer = [0; HEADER_SIZE as usize];
+    let mut handle = f.take(HEADER_SIZE as u64);
 
     handle.read(&mut buffer)?;
 
