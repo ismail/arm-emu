@@ -6,6 +6,7 @@ use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::io::{Error, ErrorKind};
+use std::path::Path;
 use std::process::Command;
 
 static ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
@@ -75,7 +76,7 @@ fn run_executable(executable: Executable, args: &Vec<String>) -> Result<(), io::
                     "Invalid executable specification.",
                 ))
             }
-        }
+        },
     }
 
     if sysroot != "" {
@@ -92,8 +93,23 @@ fn run_executable(executable: Executable, args: &Vec<String>) -> Result<(), io::
             ))
             .args(&args[1..])
             .status()
-            .expect(format!("Unable to run /usr/bin/qemu-{}", qemu_suffix).as_str());
+            .expect(
+                format!(
+                    "Unable to run /usr/bin/qemu-{} using {} as sysroot.",
+                    qemu_suffix, sysroot
+                )
+                .as_str(),
+            );
     } else {
+        // If there is no sysroot then the loader should exist in the filesystem.
+        // Check that and error otherwise.
+
+        let loader = format!("/lib{}/ld-linux{}", lib_suffix, ld_suffix);
+        if !Path::new(&loader).exists() {
+            println!("{}", format!("{} does not exist, consider setting SYSROOT variable to a working sysroot path.", loader));
+            return Ok(());
+        }
+
         Command::new(format!("/usr/bin/qemu-{}", qemu_suffix))
             .args(&args[1..])
             .status()
