@@ -8,47 +8,54 @@ use std::process::Command;
 static ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 const ARM_MACHINE_TYPE: u16 = 40;
 
-fn handle_aarch64(args: &Vec<String>) {
-    match env::var("SYSROOT") {
-        Ok(val) => {
-            Command::new("/usr/bin/qemu-aarch64")
-                .arg(format!("{}/lib64/ld-linux-aarch64.so.1", val))
-                .arg("--library-path")
-                .arg(format!("{root}/usr/lib64:{root}/lib64", root = val))
-                .args(&args[1..])
-                .status()
-                .expect("Unable to run /usr/bin/qemu-aarch64");
+enum ELFClass {
+    ELFCLASS32 = 1,
+    ELFCLASS64,
+}
+
+fn handle_arm(args: &Vec<String>, elf_class: ELFClass) {
+    let ld_suffix: &str;
+    let lib_suffix: &str;
+    let qemu_suffix: &str;
+    let sysroot: &str = &env::var("SYSROOT").unwrap_or("".to_string());
+
+    match elf_class {
+        ELFClass::ELFCLASS32 => {
+            ld_suffix = "armhf.so.3";
+            lib_suffix = "";
+            qemu_suffix = "arm"
         }
-        Err(_val) => {
-            Command::new("/usr/bin/qemu-aarch64")
-                .args(&args[1..])
-                .status()
-                .expect("Unable to run /usr/bin/qemu-aarch64");
+        ELFClass::ELFCLASS64 => {
+            ld_suffix = "aarch64.so.1";
+            qemu_suffix = "aarch64";
+            lib_suffix = "64";
         }
+    }
+
+    if sysroot != "" {
+        Command::new(format!("/usr/bin/qemu-{}", qemu_suffix))
+            .arg(format!(
+                "{}/lib{}/ld-linux-{}",
+                sysroot, lib_suffix, ld_suffix
+            ))
+            .arg("--library-path")
+            .arg(format!(
+                "{root}/usr/lib{suffix}:{root}/lib{suffix}",
+                root = sysroot,
+                suffix = lib_suffix
+            ))
+            .args(&args[1..])
+            .status()
+            .expect(format!("Unable to run /usr/bin/qemu-{}", qemu_suffix).as_str());
+    } else {
+        Command::new(format!("/usr/bin/qemu-{}", qemu_suffix))
+            .args(&args[1..])
+            .status()
+            .expect(format!("Unable to run /usr/bin/qemu-{}", qemu_suffix).as_str());
     }
 }
 
-fn handle_armv7(args: &Vec<String>) {
-    match env::var("SYSROOT") {
-        Ok(val) => {
-            Command::new("/usr/bin/qemu-arm")
-                .arg(format!("{}/lib/ld-linux-armhf.so.3", val))
-                .arg("--library-path")
-                .arg(format!("{root}/usr/lib:{root}/lib", root = val))
-                .args(&args[1..])
-                .status()
-                .expect("Unable to run /usr/bin/qemu-arm");
-        }
-        Err(_val) => {
-            Command::new("/usr/bin/qemu-arm")
-                .args(&args[1..])
-                .status()
-                .expect("Unable to run /usr/bin/qemu-arm");
-        }
-    }
-}
-
-fn get_elf_class(executable: &str) -> Result<u8, io::Error> {
+fn get_elf_class(executable: &str) -> Result<ELFClass, io::Error> {
     let f = File::open(&executable)?;
 
     // https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.eheader.html
@@ -80,23 +87,18 @@ fn get_elf_class(executable: &str) -> Result<u8, io::Error> {
 
     let elfclass = buffer[4];
 
-    Ok(elfclass)
+    match elfclass {
+        1 => return Ok(ELFClass::ELFCLASS32),
+        2 => return Ok(ELFClass::ELFCLASS64),
+        _ => return Err(Error::new(ErrorKind::Other, "Invalid ELF class.")),
+    }
 }
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
-    let elfclass = get_elf_class(&args[1]);
+    let elfclass = get_elf_class(&args[1]).unwrap();
 
-    match elfclass {
-        Ok(v) => match v {
-            1 => handle_armv7(&args),
-            2 => handle_aarch64(&args),
-            _ => {
-                return Err(Error::new(ErrorKind::Other, format!("Invalid ELF class {}.", v)));
-            }
-        },
-        Err(e) => return Err(e),
-    }
+    handle_arm(&args, elfclass);
 
     Ok(())
 }
