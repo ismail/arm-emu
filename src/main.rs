@@ -125,7 +125,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     let mut buffer = [0; HEADER_SIZE as usize];
     let mut handle = f.take(HEADER_SIZE as u64);
 
-    handle.read(&mut buffer)?;
+    handle.read_exact(&mut buffer)?;
 
     if buffer[..4] != ELF_MAGIC {
         return Err(Error::new(
