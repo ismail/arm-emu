@@ -2,7 +2,11 @@ use std::env;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
+use std::io::{Error, ErrorKind};
 use std::process::Command;
+
+static ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
+const ARM_MACHINE_TYPE: u16 = 40;
 
 fn handle_aarch64(args: &Vec<String>) {
     match env::var("SYSROOT") {
@@ -44,38 +48,54 @@ fn handle_armv7(args: &Vec<String>) {
     }
 }
 
-fn main() -> io::Result<()> {
-    let args: Vec<String> = env::args().collect();
+fn get_elf_class(executable: &str) -> Result<u8, io::Error> {
+    let f = File::open(&executable)?;
 
-    let f = File::open(&args[1])?;
-
-    // unsigned char   e_ident[16];
+    // https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.eheader.html
+    // unsigned char   e_ident[16]
     // uint16_t        e_type;
     // uint16_t        e_machine;
     let mut buffer = [0; 16 + 2 + 2];
     let mut handle = f.take(16 + 2 + 2);
-    let elf_magic: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 
     handle.read(&mut buffer)?;
 
-    assert_eq!(elf_magic, buffer[..4], "{} is not an ELF file.", &args[1]);
-
-    let machine_type: u8 = buffer[18] as u8;
-    if machine_type != 40 {
-        panic!(
-            "{} is not an ARM executable, machine type: {}",
-            &args[1], machine_type
-        );
+    if buffer[..4] != ELF_MAGIC {
+        return Err(Error::new(
+            ErrorKind::Other,
+            format!("{} is not an ELF file.", executable),
+        ));
     }
 
-    let elfclass: u8 = buffer[4] as u8;
+    let machine_type: u16 = buffer[18] as u16 + buffer[19] as u16 * 256;
+    if machine_type != ARM_MACHINE_TYPE {
+        return Err(Error::new(
+            ErrorKind::Other,
+            format!(
+                "{} is not an ARM executable, machine type: {}",
+                executable, machine_type,
+            ),
+        ));
+    }
+
+    let elfclass = buffer[4];
+
+    Ok(elfclass)
+}
+
+fn main() -> io::Result<()> {
+    let args: Vec<String> = env::args().collect();
+    let elfclass = get_elf_class(&args[1]);
 
     match elfclass {
-        1 => handle_armv7(&args),
-        2 => handle_aarch64(&args),
-        _ => {
-            panic!("Invalid ELF class.");
-        }
+        Ok(v) => match v {
+            1 => handle_armv7(&args),
+            2 => handle_aarch64(&args),
+            _ => {
+                return Err(Error::new(ErrorKind::Other, "Invalid ELF class."));
+            }
+        },
+        Err(e) => return Err(e),
     }
 
     Ok(())
