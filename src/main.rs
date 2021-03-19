@@ -103,7 +103,7 @@ fn run_executable(executable: Executable, args: &Vec<String>) -> Result<(), io::
     Ok(())
 }
 
-fn get_executable(executable: &str) -> Result<Executable, io::Error> {
+fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     let f = File::open(&executable)?;
 
     let mut buffer = [0; HEADER_SIZE as usize];
@@ -152,7 +152,7 @@ fn get_executable(executable: &str) -> Result<Executable, io::Error> {
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
-    let executable = get_executable(&args[1]).unwrap();
+    let executable = setup_executable(&args[1]).unwrap();
 
     run_executable(executable, &args).unwrap();
 
