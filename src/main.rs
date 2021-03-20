@@ -81,6 +81,13 @@ fn run_executable(executable: Executable, args: &Vec<String>) -> Result<(), io::
     }
 
     if sysroot != "" {
+        // Sanity check
+        let loader = format!("{}/lib{}/ld-linux{}", sysroot, lib_suffix, ld_suffix);
+        if !Path::new(&loader).exists() {
+            println!("{}", format!("{} does not exist, {} is not setup correctly.", loader, sysroot));
+            return Ok(());
+        }
+
         Command::new(format!("/usr/bin/qemu-{}", qemu_suffix))
             .arg(format!(
                 "{}/lib{}/ld-linux{}",
