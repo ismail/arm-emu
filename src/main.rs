@@ -39,7 +39,7 @@ fn run_executable(executable: Executable, args: &Vec<String>) -> Result<(), io::
     let ld_suffix: &str;
     let lib_suffix: &str;
     let qemu_suffix: &str;
-    let sysroot = env::var("SYSROOT").unwrap_or_default();
+    let sysroot = env::var("EMU_SYSROOT").unwrap_or_default();
 
     match executable.class {
         ELFClass::ELFCLASS32 => match executable.machine {
@@ -120,7 +120,7 @@ fn run_executable(executable: Executable, args: &Vec<String>) -> Result<(), io::
 
         let loader = format!("/lib{}/ld-linux{}", lib_suffix, ld_suffix);
         if !Path::new(&loader).exists() {
-            println!("{}", format!("{} does not exist, consider setting SYSROOT variable to a working sysroot path.", loader));
+            println!("{}", format!("{} does not exist, consider setting EMU_SYSROOT variable to a working sysroot path.", loader));
             return Ok(());
         }
 
