@@ -35,7 +35,7 @@ struct Executable {
     machine: Machine,
 }
 
-fn run_executable(executable: Executable, args: &Vec<String>) -> Result<(), io::Error> {
+fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Error> {
     let ld_suffix: &str;
     let lib_suffix: &str;
     let qemu_suffix: &str;
