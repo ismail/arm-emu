@@ -48,3 +48,8 @@ After that run it just as any executable:
 > /usr/lib/sysroots/aarch64/usr/bin/bash
 ismail@:/home/ismail>
 ```
+
+### Creating ARM{64} sysroots
+
+See https://github.com/ismail/hacks/blob/master/sysrooter.sh for a script for creating
+openSUSE Tumbleweed based sysroot for ARM{64}.
