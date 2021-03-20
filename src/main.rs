@@ -39,7 +39,6 @@ fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Err
     let ld_suffix: &str;
     let lib_suffix: &str;
     let qemu_suffix: &str;
-    let sysroot = env::var("EMU_SYSROOT").unwrap_or_default();
 
     match executable.class {
         ELFClass::ELFCLASS32 => match executable.machine {
@@ -80,6 +79,7 @@ fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Err
         },
     }
 
+    let sysroot = env::var("EMU_SYSROOT").unwrap_or_default();
     if !sysroot.is_empty() {
         // Sanity check
         let loader = format!("{}/lib{}/ld-linux{}", sysroot, lib_suffix, ld_suffix);
