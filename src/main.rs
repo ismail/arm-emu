@@ -84,7 +84,13 @@ fn run_executable(executable: Executable, args: &Vec<String>) -> Result<(), io::
         // Sanity check
         let loader = format!("{}/lib{}/ld-linux{}", sysroot, lib_suffix, ld_suffix);
         if !Path::new(&loader).exists() {
-            println!("{}", format!("{} does not exist, {} is not setup correctly.", loader, sysroot));
+            println!(
+                "{}",
+                format!(
+                    "{} does not exist, {} is not setup correctly.",
+                    loader, sysroot
+                )
+            );
             return Ok(());
         }
 
