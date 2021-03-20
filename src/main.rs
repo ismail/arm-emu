@@ -80,7 +80,7 @@ fn run_executable(executable: Executable, args: &Vec<String>) -> Result<(), io::
         },
     }
 
-    if sysroot != "" {
+    if !sysroot.is_empty() {
         // Sanity check
         let loader = format!("{}/lib{}/ld-linux{}", sysroot, lib_suffix, ld_suffix);
         if !Path::new(&loader).exists() {
@@ -107,13 +107,12 @@ fn run_executable(executable: Executable, args: &Vec<String>) -> Result<(), io::
             ))
             .args(&args[1..])
             .status()
-            .expect(
-                format!(
+            .unwrap_or_else(|_| {
+                panic!(
                     "Unable to run /usr/bin/qemu-{} using {} as sysroot.",
                     qemu_suffix, sysroot
                 )
-                .as_str(),
-            );
+            });
     } else {
         // If there is no sysroot then the loader should exist in the filesystem.
         // Check that and error otherwise.
@@ -127,7 +126,7 @@ fn run_executable(executable: Executable, args: &Vec<String>) -> Result<(), io::
         Command::new(format!("/usr/bin/qemu-{}", qemu_suffix))
             .args(&args[1..])
             .status()
-            .expect(format!("Unable to run /usr/bin/qemu-{}", qemu_suffix).as_str());
+            .unwrap_or_else(|_| panic!("Unable to run /usr/bin/qemu-{}", qemu_suffix));
     }
 
     Ok(())
