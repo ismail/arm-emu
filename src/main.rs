@@ -181,11 +181,14 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     Ok(exec)
 }
 
-fn main() -> io::Result<()> {
+fn main() {
     let args: Vec<String> = env::args().collect();
+
+    if args.len() < 2 {
+        println!("Usage: {} program <args>", args[0]);
+        return;
+    }
+
     let executable = setup_executable(&args[1]).unwrap();
-
     run_executable(executable, &args).unwrap();
-
-    Ok(())
 }
