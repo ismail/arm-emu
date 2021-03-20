@@ -39,7 +39,7 @@ fn run_executable(executable: Executable, args: &Vec<String>) -> Result<(), io::
     let ld_suffix: &str;
     let lib_suffix: &str;
     let qemu_suffix: &str;
-    let sysroot: &str = &env::var("SYSROOT").unwrap_or("".to_string());
+    let sysroot = env::var("SYSROOT").unwrap_or_default();
 
     match executable.class {
         ELFClass::ELFCLASS32 => match executable.machine {
