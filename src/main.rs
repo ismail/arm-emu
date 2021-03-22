@@ -66,7 +66,7 @@ fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Err
                 lib_suffix = "64";
             }
             Machine::X86_64 => {
-                ld_suffix = "-x86_64.so.2";
+                ld_suffix = "-x86-64.so.2";
                 qemu_suffix = "x86_64";
                 lib_suffix = "64";
             }
