@@ -314,7 +314,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                         .read_to_end(&mut interpreter)?;
 
                     exec_loader = str::from_utf8(&interpreter).unwrap().to_string();
-                    println!("Loader: {}", exec_loader);
+                    //println!("Loader: {}", exec_loader);
                 }
                 ELFClass::ELFCLASS64 => {
                     let mut p_vaddr = [0; 8];
@@ -343,7 +343,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                     f.take(interpreter_size).read_to_end(&mut interpreter)?;
 
                     exec_loader = str::from_utf8(&interpreter).unwrap().to_string();
-                    println!("Loader: {}", exec_loader);
+                    //println!("Loader: {}", exec_loader);
                 }
             }
             break;
