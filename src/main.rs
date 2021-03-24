@@ -5,21 +5,22 @@ use std::env;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
+use std::io::SeekFrom;
 use std::io::{Error, ErrorKind};
 use std::path::Path;
 use std::process::Command;
+use std::str;
 
 static ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
-
-// https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.eheader.html
-// unsigned char   e_ident[16]
-// uint16_t        e_type;
-// uint16_t        e_machine;
-const HEADER_SIZE: u8 = 16 + 2 + 2;
 
 enum ELFClass {
     ELFCLASS32 = 1,
     ELFCLASS64,
+}
+
+enum Endian {
+    Little = 1,
+    Big,
 }
 
 #[derive(FromPrimitive)]
@@ -31,27 +32,18 @@ enum Machine {
 }
 
 struct Executable {
+    loader: String,
     class: ELFClass,
     machine: Machine,
 }
 
 fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Error> {
-    let ld_suffix: &str;
-    let lib_suffix: &str;
     let qemu_suffix: &str;
 
     match executable.class {
         ELFClass::ELFCLASS32 => match executable.machine {
-            Machine::ARM => {
-                ld_suffix = "-armhf.so.3";
-                lib_suffix = "";
-                qemu_suffix = "arm";
-            }
-            Machine::X86 => {
-                ld_suffix = ".so.2";
-                lib_suffix = "";
-                qemu_suffix = "i386";
-            }
+            Machine::ARM => qemu_suffix = "arm",
+            Machine::X86 => qemu_suffix = "i386",
             _ => {
                 return Err(Error::new(
                     ErrorKind::Other,
@@ -60,16 +52,8 @@ fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Err
             }
         },
         ELFClass::ELFCLASS64 => match executable.machine {
-            Machine::AARCH64 => {
-                ld_suffix = "-aarch64.so.1";
-                qemu_suffix = "aarch64";
-                lib_suffix = "64";
-            }
-            Machine::X86_64 => {
-                ld_suffix = "-x86-64.so.2";
-                qemu_suffix = "x86_64";
-                lib_suffix = "64";
-            }
+            Machine::AARCH64 => qemu_suffix = "aarch64",
+            Machine::X86_64 => qemu_suffix = "x86_64",
             _ => {
                 return Err(Error::new(
                     ErrorKind::Other,
@@ -82,28 +66,28 @@ fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Err
     let sysroot = env::var("EMU_SYSROOT").unwrap_or_default();
     if !sysroot.is_empty() {
         // Sanity check
-        let loader = format!("{}/lib{}/ld-linux{}", sysroot, lib_suffix, ld_suffix);
+        let loader = format!("{}/{}", sysroot, executable.loader);
         if !Path::new(&loader).exists() {
             println!(
                 "{}",
                 format!(
                     "{} does not exist, {} is not setup correctly.",
-                    loader, sysroot
+                    executable.loader, sysroot
                 )
             );
             return Ok(());
         }
 
         Command::new(format!("/usr/bin/qemu-{}", qemu_suffix))
-            .arg(format!(
-                "{}/lib{}/ld-linux{}",
-                sysroot, lib_suffix, ld_suffix
-            ))
+            .arg(format!("{}/{}", sysroot, &executable.loader))
             .arg("--library-path")
             .arg(format!(
                 "{root}/usr/lib{suffix}:{root}/lib{suffix}",
                 root = sysroot,
-                suffix = lib_suffix
+                suffix = match executable.class {
+                    ELFClass::ELFCLASS64 => "64",
+                    _ => "",
+                }
             ))
             .args(&args[1..])
             .status()
@@ -117,9 +101,8 @@ fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Err
         // If there is no sysroot then the loader should exist in the filesystem.
         // Check that and error otherwise.
 
-        let loader = format!("/lib{}/ld-linux{}", lib_suffix, ld_suffix);
-        if !Path::new(&loader).exists() {
-            println!("{}", format!("{} does not exist, consider setting EMU_SYSROOT variable to a working sysroot path.", loader));
+        if !executable.loader.is_empty() && !Path::new(&executable.loader).exists() {
+            println!("{}", format!("{} does not exist, consider setting EMU_SYSROOT variable to a working sysroot path.", executable.loader));
             return Ok(());
         }
 
@@ -133,28 +116,65 @@ fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Err
 }
 
 fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
-    let f = File::open(&executable)?;
+    let mut f = File::open(&executable)?;
 
-    let mut buffer = [0; HEADER_SIZE as usize];
-    let mut handle = f.take(HEADER_SIZE as u64);
+    // https://man7.org/linux/man-pages/man5/elf.5.html
+    //  #define EI_NIDENT 16
 
-    handle.read_exact(&mut buffer)?;
+    // typedef struct {
+    //      unsigned char e_ident[EI_NIDENT];
+    //      uint16_t      e_type;
+    //      uint16_t      e_machine;
+    //      uint32_t      e_version;
+    //      ElfN_Addr     e_entry; (uint32_t or uint64_t)
+    //      ElfN_Off      e_phoff; (uint32_t or uint64_t)
+    //      uint32_t      e_flags;
+    //      uint16_t      e_ehsize;
+    //      uint16_t      e_phentsize;
+    //      uint16_t      e_phnum;
+    //      uint16_t      e_shentsize;
+    //      uint16_t      e_shnum;
+    //      uint16_t      e_shstrndx;
+    // } ElfN_Ehdr;
 
-    if buffer[..4] != ELF_MAGIC {
+    let mut e_ident = [0; 16];
+
+    // Read the elf magic
+    f.read(&mut e_ident)?;
+    if e_ident[..4] != ELF_MAGIC {
         return Err(Error::new(
             ErrorKind::Other,
             format!("{} is not an ELF file.", executable),
         ));
     }
 
-    let machine_type_value: u16 = buffer[18] as u16 + buffer[19] as u16 * 256;
-    let machine_type: Machine;
+    // EI_CLASS
+    let elfclass = e_ident[4];
+    let exec_class = match elfclass {
+        1 => ELFClass::ELFCLASS32,
+        2 => ELFClass::ELFCLASS64,
+        _ => return Err(Error::new(ErrorKind::Other, "Invalid ELF class.")),
+    };
 
-    match FromPrimitive::from_u16(machine_type_value) {
-        Some(Machine::ARM) => machine_type = Machine::ARM,
-        Some(Machine::AARCH64) => machine_type = Machine::AARCH64,
-        Some(Machine::X86) => machine_type = Machine::X86,
-        Some(Machine::X86_64) => machine_type = Machine::X86_64,
+    // EI_DATA
+    let endian = e_ident[5];
+    let exec_endian = match endian {
+        1 => Endian::Little,
+        2 => Endian::Big,
+        _ => return Err(Error::new(ErrorKind::Other, "Unknown endianness.")),
+    };
+
+    // Read e_machine
+    f.seek(SeekFrom::Start(18))?;
+    let mut e_machine = [0; 2];
+    f.read(&mut e_machine)?;
+
+    let machine_type_value: u16 = u16::from_le_bytes(e_machine);
+    let exec_machine = match FromPrimitive::from_u16(machine_type_value) {
+        Some(Machine::ARM) => Machine::ARM,
+        Some(Machine::AARCH64) => Machine::AARCH64,
+        Some(Machine::X86) => Machine::X86,
+        Some(Machine::X86_64) => Machine::X86_64,
         None => {
             return Err(Error::new(
                 ErrorKind::Other,
@@ -166,15 +186,177 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
         }
     };
 
-    let elfclass = buffer[4];
+    // Read e_phoff, e_phentsize
+    let pheader_offset: u64;
+    let pheader_size: u16;
+
+    match exec_class {
+        ELFClass::ELFCLASS32 => {
+            let mut e_phoff = [0; 4];
+            f.seek(SeekFrom::Start(28))?;
+            f.read(&mut e_phoff)?;
+
+            pheader_offset = match exec_endian {
+                Endian::Little => u32::from_le_bytes(e_phoff).into(),
+                Endian::Big => u32::from_be_bytes(e_phoff).into(),
+            };
+
+            // Read e_phentsize
+            let mut e_phentsize = [0; 2];
+            f.seek(SeekFrom::Current(10))?;
+            f.read(&mut e_phentsize)?;
+
+            pheader_size = match exec_endian {
+                Endian::Little => u16::from_le_bytes(e_phentsize),
+                Endian::Big => u16::from_be_bytes(e_phentsize),
+            };
+        }
+        ELFClass::ELFCLASS64 => {
+            let mut e_phoff = [0; 8];
+            f.seek(SeekFrom::Start(32))?;
+            f.read(&mut e_phoff)?;
+
+            pheader_offset = match exec_endian {
+                Endian::Little => u64::from_le_bytes(e_phoff),
+                Endian::Big => u64::from_be_bytes(e_phoff),
+            };
+
+            // Read e_phentsize
+            let mut e_phentsize = [0; 2];
+            f.seek(SeekFrom::Current(14))?;
+            f.read(&mut e_phentsize)?;
+
+            pheader_size = match exec_endian {
+                Endian::Little => u16::from_le_bytes(e_phentsize),
+                Endian::Big => u16::from_be_bytes(e_phentsize),
+            };
+        }
+    }
+
+    // Read e_phnum
+    let ph_num: u16;
+    let mut e_phnum = [0; 2];
+    f.read(&mut e_phnum)?;
+
+    ph_num = match exec_endian {
+        Endian::Little => u16::from_le_bytes(e_phnum),
+        Endian::Big => u16::from_be_bytes(e_phnum),
+    };
+
+    // Traverse all program headers and find the type with PT_INTERP
+    const PT_INTERP: u32 = 3;
+
+    /*
+    typedef struct {
+        uint32_t   p_type;
+        Elf32_Off  p_offset;
+        Elf32_Addr p_vaddr;
+        Elf32_Addr p_paddr;
+        uint32_t   p_filesz;
+        uint32_t   p_memsz;
+        uint32_t   p_flags;
+        uint32_t   p_align;
+    } Elf32_Phdr;
+
+    typedef struct {
+        uint32_t   p_type;
+        uint32_t   p_flags;
+        Elf64_Off  p_offset;
+        Elf64_Addr p_vaddr;
+        Elf64_Addr p_paddr;
+        uint64_t   p_filesz;
+        uint64_t   p_memsz;
+        uint64_t   p_align;
+    } Elf64_Phdr;
+    */
+
+    f.seek(SeekFrom::Start(pheader_offset))?;
+    let mut i = 0;
+    let mut header_type: u32;
+    let mut p_type = [0; 4];
+    let mut exec_loader: String = String::new();
+
+    while i < ph_num {
+        f.read(&mut p_type)?;
+
+        header_type = match exec_endian {
+            Endian::Little => u32::from_le_bytes(p_type),
+            Endian::Big => u32::from_be_bytes(p_type),
+        };
+
+        if header_type == PT_INTERP {
+            match exec_class {
+                ELFClass::ELFCLASS32 => {
+                    let mut p_vaddr = [0; 4];
+                    f.seek(SeekFrom::Current(4))?;
+                    f.read(&mut p_vaddr)?;
+
+                    let virtual_addr = match exec_endian {
+                        Endian::Little => u32::from_le_bytes(p_vaddr),
+                        Endian::Big => u32::from_be_bytes(p_vaddr),
+                    };
+
+                    let mut p_filesz = [0; 4];
+                    f.seek(SeekFrom::Current(8))?;
+                    f.read(&mut p_filesz)?;
+
+                    let mut interpreter_size = match exec_endian {
+                        Endian::Little => u32::from_le_bytes(p_filesz),
+                        Endian::Big => u32::from_be_bytes(p_filesz),
+                    };
+
+                    // interpreter is null terminated
+                    interpreter_size = interpreter_size - 1;
+
+                    f.seek(SeekFrom::Start(virtual_addr as u64))?;
+                    let mut interpreter: Vec<u8> = Vec::with_capacity(interpreter_size as usize);
+                    f.take(interpreter_size as u64)
+                        .read_to_end(&mut interpreter)?;
+
+                    exec_loader = str::from_utf8(&interpreter).unwrap().to_string();
+                    println!("Loader: {}", exec_loader);
+                }
+                ELFClass::ELFCLASS64 => {
+                    let mut p_vaddr = [0; 8];
+                    f.seek(SeekFrom::Current(12))?;
+                    f.read(&mut p_vaddr)?;
+
+                    let virtual_addr = match exec_endian {
+                        Endian::Little => u64::from_le_bytes(p_vaddr),
+                        Endian::Big => u64::from_be_bytes(p_vaddr),
+                    };
+
+                    let mut p_filesz = [0; 8];
+                    f.seek(SeekFrom::Current(8))?;
+                    f.read(&mut p_filesz)?;
+
+                    let mut interpreter_size = match exec_endian {
+                        Endian::Little => u64::from_le_bytes(p_filesz),
+                        Endian::Big => u64::from_be_bytes(p_filesz),
+                    };
+
+                    // interpreter is null terminated
+                    interpreter_size = interpreter_size - 1;
+
+                    f.seek(SeekFrom::Start(virtual_addr))?;
+                    let mut interpreter: Vec<u8> = Vec::with_capacity(interpreter_size as usize);
+                    f.take(interpreter_size).read_to_end(&mut interpreter)?;
+
+                    exec_loader = str::from_utf8(&interpreter).unwrap().to_string();
+                    println!("Loader: {}", exec_loader);
+                }
+            }
+            break;
+        }
+
+        f.seek(SeekFrom::Current((pheader_size as i64) - 4))?;
+        i = i + 1;
+    }
 
     let exec = Executable {
-        class: match elfclass {
-            1 => ELFClass::ELFCLASS32,
-            2 => ELFClass::ELFCLASS64,
-            _ => return Err(Error::new(ErrorKind::Other, "Invalid ELF class.")),
-        },
-        machine: machine_type,
+        loader: exec_loader,
+        class: exec_class,
+        machine: exec_machine,
     };
 
     Ok(exec)
