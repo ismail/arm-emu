@@ -133,16 +133,14 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     }
 
     // EI_CLASS
-    let elfclass = e_ident[4];
-    let exec_class = match elfclass {
+    let exec_class = match e_ident[4] {
         1 => ELFClass::ELFCLASS32,
         2 => ELFClass::ELFCLASS64,
         _ => return Err(Error::new(ErrorKind::Other, "Invalid ELF class.")),
     };
 
     // EI_DATA
-    let endian = e_ident[5];
-    let exec_endian = match endian {
+    let exec_endian = match e_ident[5] {
         1 => Endian::Little,
         2 => Endian::Big,
         _ => return Err(Error::new(ErrorKind::Other, "Unknown endianness.")),
@@ -170,7 +168,6 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
         }
     };
 
-    // Read e_phoff, e_phentsize
     let pheader_offset: u64;
     let pheader_size: u16;
 
@@ -185,7 +182,6 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                 Endian::Big => u32::from_be_bytes(e_phoff).into(),
             };
 
-            // Read e_phentsize
             let mut e_phentsize = [0; 2];
             f.seek(SeekFrom::Current(10))?;
             f.read(&mut e_phentsize)?;
@@ -205,7 +201,6 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                 Endian::Big => u64::from_be_bytes(e_phoff),
             };
 
-            // Read e_phentsize
             let mut e_phentsize = [0; 2];
             f.seek(SeekFrom::Current(14))?;
             f.read(&mut e_phentsize)?;
@@ -217,7 +212,6 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
         }
     }
 
-    // Read e_phnum
     let ph_num: u16;
     let mut e_phnum = [0; 2];
     f.read(&mut e_phnum)?;
