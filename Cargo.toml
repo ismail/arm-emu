@@ -10,3 +10,4 @@ num-derive = "0.3"
 
 [profile.release]
 lto = true
+panic = 'abort'
