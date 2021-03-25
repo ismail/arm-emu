@@ -1,6 +1,5 @@
-extern crate log;
-extern crate pretty_env_logger;
-use log::{debug, info, warn};
+use pretty_env_logger;
+use log::debug;
 
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
