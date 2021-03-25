@@ -40,27 +40,11 @@ struct Executable {
 fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Error> {
     let qemu_suffix: &str;
 
-    match executable.class {
-        ELFClass::ELFCLASS32 => match executable.machine {
-            Machine::ARM => qemu_suffix = "arm",
-            Machine::X86 => qemu_suffix = "i386",
-            _ => {
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    "Invalid executable specification.",
-                ))
-            }
-        },
-        ELFClass::ELFCLASS64 => match executable.machine {
-            Machine::AARCH64 => qemu_suffix = "aarch64",
-            Machine::X86_64 => qemu_suffix = "x86_64",
-            _ => {
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    "Invalid executable specification.",
-                ))
-            }
-        },
+    match executable.machine {
+        Machine::AARCH64 => qemu_suffix = "aarch64",
+        Machine::ARM => qemu_suffix = "arm",
+        Machine::X86 => qemu_suffix = "i386",
+        Machine::X86_64 => qemu_suffix = "x86_64",
     }
 
     let sysroot = env::var("EMU_SYSROOT").unwrap_or_default();
