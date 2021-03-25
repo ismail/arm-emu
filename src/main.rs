@@ -124,7 +124,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     let mut e_ident = [0; 16];
 
     // Read the elf magic
-    f.read(&mut e_ident)?;
+    f.read_exact(&mut e_ident)?;
     if e_ident[..4] != ELF_MAGIC {
         return Err(Error::new(
             ErrorKind::Other,
@@ -149,7 +149,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     // Read e_machine
     f.seek(SeekFrom::Start(18))?;
     let mut e_machine = [0; 2];
-    f.read(&mut e_machine)?;
+    f.read_exact(&mut e_machine)?;
 
     let machine_type_value: u16 = u16::from_le_bytes(e_machine);
     let exec_machine = match FromPrimitive::from_u16(machine_type_value) {
@@ -175,7 +175,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
         ELFClass::ELFCLASS32 => {
             let mut e_phoff = [0; 4];
             f.seek(SeekFrom::Start(28))?;
-            f.read(&mut e_phoff)?;
+            f.read_exact(&mut e_phoff)?;
 
             pheader_offset = match exec_endian {
                 Endian::Little => u32::from_le_bytes(e_phoff).into(),
@@ -184,7 +184,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
 
             let mut e_phentsize = [0; 2];
             f.seek(SeekFrom::Current(10))?;
-            f.read(&mut e_phentsize)?;
+            f.read_exact(&mut e_phentsize)?;
 
             pheader_size = match exec_endian {
                 Endian::Little => u16::from_le_bytes(e_phentsize),
@@ -194,7 +194,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
         ELFClass::ELFCLASS64 => {
             let mut e_phoff = [0; 8];
             f.seek(SeekFrom::Start(32))?;
-            f.read(&mut e_phoff)?;
+            f.read_exact(&mut e_phoff)?;
 
             pheader_offset = match exec_endian {
                 Endian::Little => u64::from_le_bytes(e_phoff),
@@ -203,7 +203,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
 
             let mut e_phentsize = [0; 2];
             f.seek(SeekFrom::Current(14))?;
-            f.read(&mut e_phentsize)?;
+            f.read_exact(&mut e_phentsize)?;
 
             pheader_size = match exec_endian {
                 Endian::Little => u16::from_le_bytes(e_phentsize),
@@ -214,7 +214,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
 
     let ph_num: u16;
     let mut e_phnum = [0; 2];
-    f.read(&mut e_phnum)?;
+    f.read_exact(&mut e_phnum)?;
 
     ph_num = match exec_endian {
         Endian::Little => u16::from_le_bytes(e_phnum),
@@ -255,7 +255,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     let mut exec_loader: String = String::new();
 
     while i < ph_num {
-        f.read(&mut p_type)?;
+        f.read_exact(&mut p_type)?;
 
         header_type = match exec_endian {
             Endian::Little => u32::from_le_bytes(p_type),
@@ -267,7 +267,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                 ELFClass::ELFCLASS32 => {
                     let mut p_vaddr = [0; 4];
                     f.seek(SeekFrom::Current(4))?;
-                    f.read(&mut p_vaddr)?;
+                    f.read_exact(&mut p_vaddr)?;
 
                     let virtual_addr = match exec_endian {
                         Endian::Little => u32::from_le_bytes(p_vaddr),
@@ -276,7 +276,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
 
                     let mut p_filesz = [0; 4];
                     f.seek(SeekFrom::Current(8))?;
-                    f.read(&mut p_filesz)?;
+                    f.read_exact(&mut p_filesz)?;
 
                     let mut interpreter_size = match exec_endian {
                         Endian::Little => u32::from_le_bytes(p_filesz),
@@ -284,7 +284,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                     };
 
                     // interpreter is null terminated
-                    interpreter_size = interpreter_size - 1;
+                    interpreter_size -= 1;
 
                     f.seek(SeekFrom::Start(virtual_addr as u64))?;
                     let mut interpreter: Vec<u8> = Vec::with_capacity(interpreter_size as usize);
@@ -297,7 +297,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                 ELFClass::ELFCLASS64 => {
                     let mut p_vaddr = [0; 8];
                     f.seek(SeekFrom::Current(12))?;
-                    f.read(&mut p_vaddr)?;
+                    f.read_exact(&mut p_vaddr)?;
 
                     let virtual_addr = match exec_endian {
                         Endian::Little => u64::from_le_bytes(p_vaddr),
@@ -306,7 +306,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
 
                     let mut p_filesz = [0; 8];
                     f.seek(SeekFrom::Current(8))?;
-                    f.read(&mut p_filesz)?;
+                    f.read_exact(&mut p_filesz)?;
 
                     let mut interpreter_size = match exec_endian {
                         Endian::Little => u64::from_le_bytes(p_filesz),
@@ -314,7 +314,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                     };
 
                     // interpreter is null terminated
-                    interpreter_size = interpreter_size - 1;
+                    interpreter_size -= 1;
 
                     f.seek(SeekFrom::Start(virtual_addr))?;
                     let mut interpreter: Vec<u8> = Vec::with_capacity(interpreter_size as usize);
@@ -328,7 +328,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
         }
 
         f.seek(SeekFrom::Current((pheader_size as i64) - 4))?;
-        i = i + 1;
+        i += 1;
     }
 
     let exec = Executable {
