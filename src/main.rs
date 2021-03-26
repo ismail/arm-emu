@@ -1,9 +1,10 @@
-use pretty_env_logger;
 use log::debug;
+use pretty_env_logger;
 
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
+use std::convert::TryInto;
 use std::env;
 use std::fs::File;
 use std::io;
@@ -38,6 +39,25 @@ struct Executable {
     loader: String,
     class: ELFClass,
     machine: Machine,
+}
+
+fn unpack<const N: usize>(bytes: &[u8; N], endian: &Endian) -> u64 {
+    let mut result: u64 = 0;
+
+    match endian {
+        Endian::Little => {
+            for i in (0..N).rev() {
+                result += (bytes[i] as u64) * (2u64.pow(i as u32 * 8))
+            }
+        }
+        Endian::Big => {
+            for i in 0..N {
+                result += (bytes[i] as u64) * (2u64.pow((N as u32 - i as u32 - 1) * 8))
+            }
+        }
+    }
+
+    result
 }
 
 fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Error> {
@@ -165,7 +185,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     let mut e_machine = [0; 2];
     f.read_exact(&mut e_machine)?;
 
-    let machine_type_value: u16 = u16::from_le_bytes(e_machine);
+    let machine_type_value: u16 = unpack::<2>(&e_machine, &exec_endian).try_into().unwrap();
     let exec_machine = match FromPrimitive::from_u16(machine_type_value) {
         Some(Machine::ARM) => Machine::ARM,
         Some(Machine::AARCH64) => Machine::AARCH64,
@@ -190,50 +210,30 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
             let mut e_phoff = [0; 4];
             f.seek(SeekFrom::Start(28))?;
             f.read_exact(&mut e_phoff)?;
-
-            pheader_offset = match exec_endian {
-                Endian::Little => u32::from_le_bytes(e_phoff).into(),
-                Endian::Big => u32::from_be_bytes(e_phoff).into(),
-            };
+            pheader_offset = unpack::<4>(&e_phoff, &exec_endian).try_into().unwrap();
 
             let mut e_phentsize = [0; 2];
             f.seek(SeekFrom::Current(10))?;
             f.read_exact(&mut e_phentsize)?;
-
-            pheader_size = match exec_endian {
-                Endian::Little => u16::from_le_bytes(e_phentsize),
-                Endian::Big => u16::from_be_bytes(e_phentsize),
-            };
+            pheader_size = unpack::<2>(&e_phentsize, &exec_endian).try_into().unwrap();
         }
         ELFClass::ELFCLASS64 => {
             let mut e_phoff = [0; 8];
             f.seek(SeekFrom::Start(32))?;
             f.read_exact(&mut e_phoff)?;
-
-            pheader_offset = match exec_endian {
-                Endian::Little => u64::from_le_bytes(e_phoff),
-                Endian::Big => u64::from_be_bytes(e_phoff),
-            };
+            pheader_offset = unpack::<8>(&e_phoff, &exec_endian).try_into().unwrap();
 
             let mut e_phentsize = [0; 2];
             f.seek(SeekFrom::Current(14))?;
             f.read_exact(&mut e_phentsize)?;
-
-            pheader_size = match exec_endian {
-                Endian::Little => u16::from_le_bytes(e_phentsize),
-                Endian::Big => u16::from_be_bytes(e_phentsize),
-            };
+            pheader_size = unpack::<2>(&e_phentsize, &exec_endian).try_into().unwrap();
         }
     }
 
     let ph_num: u16;
     let mut e_phnum = [0; 2];
     f.read_exact(&mut e_phnum)?;
-
-    ph_num = match exec_endian {
-        Endian::Little => u16::from_le_bytes(e_phnum),
-        Endian::Big => u16::from_be_bytes(e_phnum),
-    };
+    ph_num = unpack::<2>(&e_phnum, &exec_endian).try_into().unwrap();
 
     // Traverse all program headers and find the type with PT_INTERP
     const PT_INTERP: u32 = 3;
@@ -271,10 +271,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     while i < ph_num {
         f.read_exact(&mut p_type)?;
 
-        header_type = match exec_endian {
-            Endian::Little => u32::from_le_bytes(p_type),
-            Endian::Big => u32::from_be_bytes(p_type),
-        };
+        header_type = unpack::<4>(&p_type, &exec_endian).try_into().unwrap();
 
         if header_type == PT_INTERP {
             match exec_class {
@@ -282,20 +279,13 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                     let mut p_vaddr = [0; 4];
                     f.seek(SeekFrom::Current(4))?;
                     f.read_exact(&mut p_vaddr)?;
-
-                    let virtual_addr = match exec_endian {
-                        Endian::Little => u32::from_le_bytes(p_vaddr),
-                        Endian::Big => u32::from_be_bytes(p_vaddr),
-                    };
+                    let virtual_addr: u32 = unpack::<4>(&p_vaddr, &exec_endian).try_into().unwrap();
 
                     let mut p_filesz = [0; 4];
+                    let mut interpreter_size: u32;
                     f.seek(SeekFrom::Current(8))?;
                     f.read_exact(&mut p_filesz)?;
-
-                    let mut interpreter_size = match exec_endian {
-                        Endian::Little => u32::from_le_bytes(p_filesz),
-                        Endian::Big => u32::from_be_bytes(p_filesz),
-                    };
+                    interpreter_size = unpack::<4>(&p_filesz, &exec_endian).try_into().unwrap();
 
                     // interpreter is null terminated
                     interpreter_size -= 1;
@@ -312,20 +302,13 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                     let mut p_vaddr = [0; 8];
                     f.seek(SeekFrom::Current(12))?;
                     f.read_exact(&mut p_vaddr)?;
-
-                    let virtual_addr = match exec_endian {
-                        Endian::Little => u64::from_le_bytes(p_vaddr),
-                        Endian::Big => u64::from_be_bytes(p_vaddr),
-                    };
+                    let virtual_addr: u64 = unpack::<8>(&p_vaddr, &exec_endian).try_into().unwrap();
 
                     let mut p_filesz = [0; 8];
+                    let mut interpreter_size: u64;
                     f.seek(SeekFrom::Current(8))?;
                     f.read_exact(&mut p_filesz)?;
-
-                    let mut interpreter_size = match exec_endian {
-                        Endian::Little => u64::from_le_bytes(p_filesz),
-                        Endian::Big => u64::from_be_bytes(p_filesz),
-                    };
+                    interpreter_size = unpack::<8>(&p_filesz, &exec_endian).try_into().unwrap();
 
                     // interpreter is null terminated
                     interpreter_size -= 1;
