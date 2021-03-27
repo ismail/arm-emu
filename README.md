@@ -1,5 +1,5 @@
 # emu
-qemu-{arm,aarch64,i386,ppc64,ppc64le,x86_64} with custom sysroot support
+qemu-{arm,aarch64,i386,ppc64{le},riscv{32,64},s390x,x86_64} with custom sysroot support
 
 ### Building
 
