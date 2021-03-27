@@ -27,14 +27,16 @@ enum Endian {
 #[derive(FromPrimitive)]
 enum Machine {
     X86 = 3,
+    PPC64 = 21,
     ARM = 40,
     X86_64 = 62,
     AARCH64 = 183,
 }
 
 struct Executable {
-    loader: String,
     class: ELFClass,
+    endian: Endian,
+    loader: String,
     machine: Machine,
 }
 
@@ -63,6 +65,10 @@ fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Err
     match executable.machine {
         Machine::AARCH64 => qemu_suffix = "aarch64",
         Machine::ARM => qemu_suffix = "arm",
+        Machine::PPC64 => match executable.endian {
+            Endian::Big => qemu_suffix = "ppc64",
+            Endian::Little => qemu_suffix = "ppc64le",
+        },
         Machine::X86 => qemu_suffix = "i386",
         Machine::X86_64 => qemu_suffix = "x86_64",
     }
@@ -186,6 +192,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     let exec_machine = match FromPrimitive::from_u16(machine_type_value) {
         Some(Machine::ARM) => Machine::ARM,
         Some(Machine::AARCH64) => Machine::AARCH64,
+        Some(Machine::PPC64) => Machine::PPC64,
         Some(Machine::X86) => Machine::X86,
         Some(Machine::X86_64) => Machine::X86_64,
         None => {
@@ -326,8 +333,9 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     }
 
     let exec = Executable {
-        loader: exec_loader,
         class: exec_class,
+        endian: exec_endian,
+        loader: exec_loader,
         machine: exec_machine,
     };
 
