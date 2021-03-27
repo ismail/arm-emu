@@ -1,5 +1,3 @@
-use log::debug;
-
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
@@ -71,7 +69,7 @@ fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Err
 
     let sysroot = env::var("EMU_SYSROOT").unwrap_or_default();
     if !sysroot.is_empty() {
-        debug!("Sysroot: {}, Loader: {}", sysroot, executable.loader);
+        //println!("Sysroot: {}, Loader: {}", sysroot, executable.loader);
 
         if executable.loader.is_empty() {
             println!(
@@ -295,7 +293,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                         .read_to_end(&mut interpreter)?;
 
                     exec_loader = str::from_utf8(&interpreter).unwrap().to_string();
-                    debug!("Loader: {}", exec_loader);
+                    //println!("Loader: {}", exec_loader);
                 }
                 ELFClass::ELFCLASS64 => {
                     let mut p_vaddr = [0; 8];
@@ -317,7 +315,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                     f.take(interpreter_size).read_to_end(&mut interpreter)?;
 
                     exec_loader = str::from_utf8(&interpreter).unwrap().to_string();
-                    debug!("Loader: {}", exec_loader);
+                    //println!("Loader: {}", exec_loader);
                 }
             }
             break;
@@ -337,7 +335,6 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
 }
 
 fn main() {
-    pretty_env_logger::init();
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
