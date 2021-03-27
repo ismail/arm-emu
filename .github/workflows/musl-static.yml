@@ -1,0 +1,13 @@
+name: Static Musl Build
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: davidgraeff/rust-musl-action@master
+    - uses: actions/checkout@master
+    - name: x86_64-unknown-linux-musl
+      run: RUSTFLAGS='-C link-arg=-s' cargo build --target x86_64-unknown-linux-musl --release
