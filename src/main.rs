@@ -31,6 +31,7 @@ enum Machine {
     ARM = 40,
     X86_64 = 62,
     AARCH64 = 183,
+    RISCV = 243,
 }
 
 struct Executable {
@@ -68,6 +69,10 @@ fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Err
         Machine::PPC64 => match executable.endian {
             Endian::Big => qemu_suffix = "ppc64",
             Endian::Little => qemu_suffix = "ppc64le",
+        },
+        Machine::RISCV => match executable.class {
+            ELFClass::ELFCLASS32 => qemu_suffix = "riscv32",
+            ELFClass::ELFCLASS64 => qemu_suffix = "riscv64",
         },
         Machine::X86 => qemu_suffix = "i386",
         Machine::X86_64 => qemu_suffix = "x86_64",
@@ -193,6 +198,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
         Some(Machine::ARM) => Machine::ARM,
         Some(Machine::AARCH64) => Machine::AARCH64,
         Some(Machine::PPC64) => Machine::PPC64,
+        Some(Machine::RISCV) => Machine::RISCV,
         Some(Machine::X86) => Machine::X86,
         Some(Machine::X86_64) => Machine::X86_64,
         None => {
