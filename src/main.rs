@@ -211,7 +211,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
             return Err(Error::new(
                 ErrorKind::Other,
                 format!(
-                    "{} is not an ARM, ARM64, x86 or x86_64 executable, machine type: {}",
+                    "{} is not a supported executable, machine type: {}",
                     executable, machine_type_value,
                 ),
             ));
