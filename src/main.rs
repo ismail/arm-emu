@@ -191,8 +191,8 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
         _ => return Err(Error::new(ErrorKind::Other, "Unknown endianness.")),
     };
 
-    // Read e_machine
-    f.seek(SeekFrom::Start(18))?;
+    // Skip e_type
+    f.seek(SeekFrom::Current(2))?;
     let mut e_machine = [0; 2];
     f.read_exact(&mut e_machine)?;
 
@@ -222,23 +222,27 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     match exec_class {
         ELFClass::ELFCLASS32 => {
             let mut e_phoff = [0; 4];
-            f.seek(SeekFrom::Start(28))?;
+            // Skip e_version + e_entry
+            f.seek(SeekFrom::Current(4 + 4))?;
             f.read_exact(&mut e_phoff)?;
             pheader_offset = unpack::<4>(&e_phoff, &exec_endian);
 
             let mut e_phentsize = [0; 2];
-            f.seek(SeekFrom::Current(10))?;
+            // Skip e_shoff + e_flags + e_ehsize
+            f.seek(SeekFrom::Current(4 + 4 + 2))?;
             f.read_exact(&mut e_phentsize)?;
             pheader_size = unpack::<2>(&e_phentsize, &exec_endian).try_into().unwrap();
         }
         ELFClass::ELFCLASS64 => {
             let mut e_phoff = [0; 8];
-            f.seek(SeekFrom::Start(32))?;
+            // Skip e_version + e_entry
+            f.seek(SeekFrom::Current(4 + 8))?;
             f.read_exact(&mut e_phoff)?;
             pheader_offset = unpack::<8>(&e_phoff, &exec_endian);
 
             let mut e_phentsize = [0; 2];
-            f.seek(SeekFrom::Current(14))?;
+            // Skip e_shoff + e_flags + e_ehsize
+            f.seek(SeekFrom::Current(8 + 4 + 2))?;
             f.read_exact(&mut e_phentsize)?;
             pheader_size = unpack::<2>(&e_phentsize, &exec_endian).try_into().unwrap();
         }
@@ -291,13 +295,15 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
             match exec_class {
                 ELFClass::ELFCLASS32 => {
                     let mut p_vaddr = [0; 4];
+                    // Skip p_offset
                     f.seek(SeekFrom::Current(4))?;
                     f.read_exact(&mut p_vaddr)?;
                     let virtual_addr: u32 = unpack::<4>(&p_vaddr, &exec_endian).try_into().unwrap();
 
                     let mut p_filesz = [0; 4];
                     let mut interpreter_size: u32;
-                    f.seek(SeekFrom::Current(8))?;
+                    // Skip p_vaddr + p_paddr
+                    f.seek(SeekFrom::Current(4 + 4))?;
                     f.read_exact(&mut p_filesz)?;
                     interpreter_size = unpack::<4>(&p_filesz, &exec_endian).try_into().unwrap();
 
@@ -314,12 +320,14 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                 }
                 ELFClass::ELFCLASS64 => {
                     let mut p_vaddr = [0; 8];
-                    f.seek(SeekFrom::Current(12))?;
+                    // Skip p_flags + p_offset
+                    f.seek(SeekFrom::Current(4 + 8))?;
                     f.read_exact(&mut p_vaddr)?;
                     let virtual_addr: u64 = unpack::<8>(&p_vaddr, &exec_endian);
 
                     let mut p_filesz = [0; 8];
                     let mut interpreter_size: u64;
+                    // Skip p_paddr
                     f.seek(SeekFrom::Current(8))?;
                     f.read_exact(&mut p_filesz)?;
                     interpreter_size = unpack::<8>(&p_filesz, &exec_endian);
@@ -338,6 +346,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
             break;
         }
 
+        // Already read p_type (uint32_t) bytes
         f.seek(SeekFrom::Current((pheader_size as i64) - 4))?;
         i += 1;
     }
