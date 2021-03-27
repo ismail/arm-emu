@@ -1,5 +1,5 @@
 # emu
-qemu-{arm,aarch64,i386,x86_64} with custom sysroot support
+qemu-{arm,aarch64,i386,ppc64,ppc64le,x86_64} with custom sysroot support
 
 ### Building
 
@@ -13,17 +13,12 @@ sudo cp target/x86_64-unknown-linux-musl/release/emu /usr/bin/emu
 ### Setting it up
 Now you can set it to handle ARMv7 and ARM64 executable via systemd binfmt support
 
-```
-> cat /etc/binfmt.d/arm.conf
-:arm:M::\x7fELF\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x28\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/usr/bin/emu:
 
-> cat /etc/binfmt.d/arm64.conf
-:aarch64:M::\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\xb7\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/usr/bin/emu:CF
-
-# Make sure to restart systemd-binfmt
-> systemctl restart systemd-binfmt
 ```
-### Using an ARM{64} chroot
+# cp binfmt.d/*.conf /etc/binfmt.d
+# systemctl restart systemd-binfmt
+```
+### Using a chroot
 
 ```
 > file /usr/lib/sysroots/aarch64/usr/bin/bash
@@ -35,7 +30,7 @@ for GNU/Linux 3.7.0, stripped
 bash-5.1#
 ```
 
-### Running executables outside the chroot
+### Running executables outside the chroot (the main use case)
 
 Since executables have dependencies we need to set `EMU_SYSROOT` variable to a valid sysroot path first.
 
@@ -49,7 +44,7 @@ After that run it just as any executable:
 ismail@:/home/ismail>
 ```
 
-### Creating ARM{64} sysroots
+### Creating sysroots
 
 See https://github.com/ismail/hacks/blob/master/sysrooter.sh for a script for creating
-openSUSE Tumbleweed based sysroot for ARM{64}.
+openSUSE Tumbleweed based sysroot for ARM{64} and PPC64{LE}.
