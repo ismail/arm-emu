@@ -62,26 +62,24 @@ fn unpack<const N: usize>(bytes: &[u8; N], endian: &Endian) -> u64 {
 }
 
 fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Error> {
-    let qemu_suffix: &str;
-
-    match executable.machine {
-        Machine::AARCH64 => qemu_suffix = "aarch64",
-        Machine::ARM => qemu_suffix = "arm",
+    let qemu_suffix: &str = match executable.machine {
+        Machine::AARCH64 => "aarch64",
+        Machine::ARM => "arm",
         Machine::PPC64 => match executable.endian {
-            Endian::Big => qemu_suffix = "ppc64",
-            Endian::Little => qemu_suffix = "ppc64le",
+            Endian::Big => "ppc64",
+            Endian::Little => "ppc64le",
         },
         Machine::RISCV => match executable.class {
-            ELFClass::ELFCLASS32 => qemu_suffix = "riscv32",
-            ELFClass::ELFCLASS64 => qemu_suffix = "riscv64",
+            ELFClass::ELFCLASS32 => "riscv32",
+            ELFClass::ELFCLASS64 => "riscv64",
         },
         Machine::S390 => match executable.class {
-            ELFClass::ELFCLASS32 => qemu_suffix = "s390",
-            ELFClass::ELFCLASS64 => qemu_suffix = "s390x",
+            ELFClass::ELFCLASS32 => "s390",
+            ELFClass::ELFCLASS64 => "s390x",
         },
-        Machine::X86 => qemu_suffix = "i386",
-        Machine::X86_64 => qemu_suffix = "x86_64",
-    }
+        Machine::X86 => "i386",
+        Machine::X86_64 => "x86_64",
+    };
 
     let sysroot = env::var("EMU_SYSROOT").unwrap_or_default();
     if !sysroot.is_empty() {
