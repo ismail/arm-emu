@@ -1,5 +1,4 @@
 use log::debug;
-use pretty_env_logger;
 
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -210,7 +209,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
             let mut e_phoff = [0; 4];
             f.seek(SeekFrom::Start(28))?;
             f.read_exact(&mut e_phoff)?;
-            pheader_offset = unpack::<4>(&e_phoff, &exec_endian).try_into().unwrap();
+            pheader_offset = unpack::<4>(&e_phoff, &exec_endian);
 
             let mut e_phentsize = [0; 2];
             f.seek(SeekFrom::Current(10))?;
@@ -221,7 +220,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
             let mut e_phoff = [0; 8];
             f.seek(SeekFrom::Start(32))?;
             f.read_exact(&mut e_phoff)?;
-            pheader_offset = unpack::<8>(&e_phoff, &exec_endian).try_into().unwrap();
+            pheader_offset = unpack::<8>(&e_phoff, &exec_endian);
 
             let mut e_phentsize = [0; 2];
             f.seek(SeekFrom::Current(14))?;
@@ -302,13 +301,13 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                     let mut p_vaddr = [0; 8];
                     f.seek(SeekFrom::Current(12))?;
                     f.read_exact(&mut p_vaddr)?;
-                    let virtual_addr: u64 = unpack::<8>(&p_vaddr, &exec_endian).try_into().unwrap();
+                    let virtual_addr: u64 = unpack::<8>(&p_vaddr, &exec_endian);
 
                     let mut p_filesz = [0; 8];
                     let mut interpreter_size: u64;
                     f.seek(SeekFrom::Current(8))?;
                     f.read_exact(&mut p_filesz)?;
-                    interpreter_size = unpack::<8>(&p_filesz, &exec_endian).try_into().unwrap();
+                    interpreter_size = unpack::<8>(&p_filesz, &exec_endian);
 
                     // interpreter is null terminated
                     interpreter_size -= 1;
