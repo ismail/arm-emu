@@ -44,12 +44,12 @@ fn unpack<const N: usize>(bytes: &[u8; N], endian: &Endian) -> u64 {
     match endian {
         Endian::Little => {
             for i in (0..N).rev() {
-                result += (bytes[i] as u64) * (2u64.pow(i as u32 * 8))
+                result |= (bytes[i] as u64) << (i as u32 * 8)
             }
         }
         Endian::Big => {
             for i in 0..N {
-                result += (bytes[i] as u64) * (2u64.pow((N as u32 - i as u32 - 1) * 8))
+                result |= (bytes[i] as u64) << ((N as u32 - i as u32 - 1) * 8)
             }
         }
     }
