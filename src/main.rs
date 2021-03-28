@@ -147,7 +147,12 @@ fn run_executable(executable: Executable, args: &[String]) {
         Command::new(format!("/usr/bin/qemu-{}{}", qemu_suffix, static_suffix))
             .args(&args[1..])
             .status()
-            .unwrap_or_else(|_| panic!("Unable to run /usr/bin/qemu-{}{}", qemu_suffix, static_suffix));
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Unable to run /usr/bin/qemu-{}{}",
+                    qemu_suffix, static_suffix
+                )
+            });
     }
 }
 
