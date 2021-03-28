@@ -13,6 +13,7 @@ use std::str;
 
 static ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, TryFromPrimitive)]
 #[repr(u8)]
 enum ELFClass {
@@ -27,6 +28,7 @@ enum Endian {
     Big,
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, TryFromPrimitive)]
 #[repr(u16)]
 enum Machine {
@@ -56,6 +58,8 @@ fn unpack<const N: usize>(bytes: &[u8; N], endian: &Endian) -> u64 {
             }
         }
         Endian::Big => {
+            // The warning is wrong, we need the value and the index itself
+            #[allow(clippy::needless_range_loop)]
             for i in 0..N {
                 result |= (bytes[i] as u64) << ((N as u32 - i as u32 - 1) * 8)
             }
