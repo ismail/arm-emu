@@ -7,7 +7,6 @@ use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::io::SeekFrom;
-use std::io::{Error, ErrorKind};
 use std::path::Path;
 use std::process::Command;
 use std::str;
@@ -66,7 +65,7 @@ fn unpack<const N: usize>(bytes: &[u8; N], endian: &Endian) -> u64 {
     result
 }
 
-fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Error> {
+fn run_executable(executable: Executable, args: &[String]) {
     let qemu_suffix: &str = match executable.machine {
         Machine::AARCH64 => "aarch64",
         Machine::ARM => "arm",
@@ -91,25 +90,20 @@ fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Err
         //println!("Sysroot: {}, Loader: {}", sysroot, executable.loader);
 
         if executable.loader.is_empty() {
-            println!(
-                "EMU_SYSROOT is set to {} but this executable defines no loader.",
+            panic!(
+                "EMU_SYSROOT is set to {} but this executable defines no loader.\n \
+                This can't work, please unset EMU_SYSROOT variable and re-run the command.",
                 sysroot
             );
-            println!("This can't work, please unset EMU_SYSROOT variable and re-run the command.");
-            return Ok(());
         }
 
         // Sanity check
         let loader = format!("{}/{}", sysroot, executable.loader);
         if !Path::new(&loader).exists() {
-            println!(
-                "{}",
-                format!(
-                    "{} does not exist, {} is not setup correctly.",
-                    executable.loader, sysroot
-                )
+            panic!(
+                "{} does not exist, {} is not setup correctly.",
+                executable.loader, sysroot
             );
-            return Ok(());
         }
 
         Command::new(format!("/usr/bin/qemu-{}", qemu_suffix))
@@ -136,8 +130,7 @@ fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Err
         // Check that and error otherwise.
 
         if !executable.loader.is_empty() && !Path::new(&executable.loader).exists() {
-            println!("{}", format!("{} does not exist, consider setting EMU_SYSROOT variable to a working sysroot path.", executable.loader));
-            return Ok(());
+            panic!("{}", format!("{} does not exist, consider setting EMU_SYSROOT variable to a working sysroot path.", executable.loader));
         }
 
         Command::new(format!("/usr/bin/qemu-{}", qemu_suffix))
@@ -145,8 +138,6 @@ fn run_executable(executable: Executable, args: &[String]) -> Result<(), io::Err
             .status()
             .unwrap_or_else(|_| panic!("Unable to run /usr/bin/qemu-{}", qemu_suffix));
     }
-
-    Ok(())
 }
 
 fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
@@ -176,10 +167,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     // Read the elf magic
     f.read_exact(&mut e_ident)?;
     if e_ident[..4] != ELF_MAGIC {
-        return Err(Error::new(
-            ErrorKind::Other,
-            format!("{} is not an ELF file.", executable),
-        ));
+        panic!("{} is not an ELF file.", executable);
     }
 
     // EI_CLASS
@@ -359,5 +347,5 @@ fn main() {
     }
 
     let executable = setup_executable(&args[1]).unwrap();
-    run_executable(executable, &args).unwrap();
+    run_executable(executable, &args);
 }
