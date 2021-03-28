@@ -89,6 +89,13 @@ fn run_executable(executable: Executable, args: &[String]) {
         Machine::X86_64 => "x86_64",
     };
 
+    // On Ubuntu executables are name qemu-<arch>-static
+    let mut static_suffix: &str = "";
+    let qemu_static_path = format!("/usr/bin/qemu-{}-static", qemu_suffix);
+    if Path::new(&qemu_static_path).exists() {
+        static_suffix = "-static";
+    }
+
     let sysroot = env::var("EMU_SYSROOT").unwrap_or_default();
     if !sysroot.is_empty() {
         //println!("Sysroot: {}, Loader: {}", sysroot, executable.loader);
@@ -110,7 +117,7 @@ fn run_executable(executable: Executable, args: &[String]) {
             );
         }
 
-        Command::new(format!("/usr/bin/qemu-{}", qemu_suffix))
+        Command::new(format!("/usr/bin/qemu-{}{}", qemu_suffix, static_suffix))
             .arg(format!("{}/{}", sysroot, &executable.loader))
             .arg("--library-path")
             .arg(format!(
@@ -125,8 +132,8 @@ fn run_executable(executable: Executable, args: &[String]) {
             .status()
             .unwrap_or_else(|_| {
                 panic!(
-                    "Unable to run /usr/bin/qemu-{} using {} as sysroot.",
-                    qemu_suffix, sysroot
+                    "Unable to run /usr/bin/qemu-{}{} using {} as sysroot.",
+                    qemu_suffix, static_suffix, sysroot
                 )
             });
     } else {
@@ -137,10 +144,10 @@ fn run_executable(executable: Executable, args: &[String]) {
             panic!("{}", format!("{} does not exist, consider setting EMU_SYSROOT variable to a working sysroot path.", executable.loader));
         }
 
-        Command::new(format!("/usr/bin/qemu-{}", qemu_suffix))
+        Command::new(format!("/usr/bin/qemu-{}{}", qemu_suffix, static_suffix))
             .args(&args[1..])
             .status()
-            .unwrap_or_else(|_| panic!("Unable to run /usr/bin/qemu-{}", qemu_suffix));
+            .unwrap_or_else(|_| panic!("Unable to run /usr/bin/qemu-{}{}", qemu_suffix, static_suffix));
     }
 }
 
