@@ -14,11 +14,15 @@ use std::str;
 
 static ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 
+#[derive(Debug, TryFromPrimitive)]
+#[repr(u8)]
 enum ELFClass {
     ELFCLASS32 = 1,
     ELFCLASS64,
 }
 
+#[derive(Debug, TryFromPrimitive)]
+#[repr(u8)]
 enum Endian {
     Little = 1,
     Big,
@@ -179,18 +183,14 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     }
 
     // EI_CLASS
-    let exec_class = match e_ident[4] {
-        1 => ELFClass::ELFCLASS32,
-        2 => ELFClass::ELFCLASS64,
-        _ => return Err(Error::new(ErrorKind::Other, "Invalid ELF class.")),
-    };
+    let exec_class = ELFClass::try_from(e_ident[4]).unwrap_or_else(|_| {
+        panic!("Invalid ELF class.");
+    });
 
     // EI_DATA
-    let exec_endian = match e_ident[5] {
-        1 => Endian::Little,
-        2 => Endian::Big,
-        _ => return Err(Error::new(ErrorKind::Other, "Unknown endianness.")),
-    };
+    let exec_endian = Endian::try_from(e_ident[5]).unwrap_or_else(|_| {
+        panic!("Unknown endianness.");
+    });
 
     // Skip e_type
     f.seek(SeekFrom::Current(2))?;
