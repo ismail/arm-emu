@@ -1,5 +1,5 @@
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
+use num_enum::TryFromPrimitive;
+use std::convert::TryFrom;
 
 use std::convert::TryInto;
 use std::env;
@@ -24,7 +24,8 @@ enum Endian {
     Big,
 }
 
-#[derive(FromPrimitive)]
+#[derive(Debug, TryFromPrimitive)]
+#[repr(u16)]
 enum Machine {
     X86 = 3,
     PPC64 = 21,
@@ -197,24 +198,12 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     f.read_exact(&mut e_machine)?;
 
     let machine_type_value: u16 = unpack::<2>(&e_machine, &exec_endian).try_into().unwrap();
-    let exec_machine = match FromPrimitive::from_u16(machine_type_value) {
-        Some(Machine::ARM) => Machine::ARM,
-        Some(Machine::AARCH64) => Machine::AARCH64,
-        Some(Machine::PPC64) => Machine::PPC64,
-        Some(Machine::RISCV) => Machine::RISCV,
-        Some(Machine::S390) => Machine::S390,
-        Some(Machine::X86) => Machine::X86,
-        Some(Machine::X86_64) => Machine::X86_64,
-        None => {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!(
-                    "{} is not a supported executable, machine type: {}",
-                    executable, machine_type_value,
-                ),
-            ));
-        }
-    };
+    let exec_machine = Machine::try_from(machine_type_value).unwrap_or_else(|_| {
+        panic!(
+            "{} is not a supported executable, machine type: {}",
+            executable, machine_type_value
+        )
+    });
 
     let pheader_offset: u64;
     let pheader_size: u16;
