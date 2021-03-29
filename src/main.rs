@@ -1,7 +1,6 @@
 use num_enum::TryFromPrimitive;
 use std::convert::TryFrom;
 
-use std::convert::TryInto;
 use std::env;
 use std::fs::File;
 use std::io;
@@ -48,25 +47,13 @@ struct Executable {
     machine: Machine,
 }
 
-fn unpack<const N: usize>(bytes: &[u8; N], endian: &Endian) -> u64 {
-    let mut result: u64 = 0;
-
-    match endian {
-        Endian::Little => {
-            for i in (0..N).rev() {
-                result |= (bytes[i] as u64) << (i as u32 * 8)
-            }
+macro_rules! unpack {
+    ($bytes:expr, $inttype:ty, $endian:expr) => {
+        match $endian {
+            Endian::Little => <$inttype>::from_le_bytes($bytes),
+            Endian::Big => <$inttype>::from_be_bytes($bytes),
         }
-        Endian::Big => {
-            // The warning is wrong, we need the value and the index itself
-            #[allow(clippy::needless_range_loop)]
-            for i in 0..N {
-                result |= (bytes[i] as u64) << ((N as u32 - i as u32 - 1) * 8)
-            }
-        }
-    }
-
-    result
+    };
 }
 
 fn run_executable(executable: Executable, args: &[String]) {
@@ -201,7 +188,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     let mut e_machine = [0; 2];
     f.read_exact(&mut e_machine)?;
 
-    let machine_type_value: u16 = unpack::<2>(&e_machine, &exec_endian).try_into().unwrap();
+    let machine_type_value: u16 = unpack!(e_machine, u16, &exec_endian);
     let exec_machine = Machine::try_from(machine_type_value).unwrap_or_else(|_| {
         panic!(
             "{} is not a supported executable, machine type: {}",
@@ -218,33 +205,33 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
             // Skip e_version + e_entry
             f.seek(SeekFrom::Current(4 + 4))?;
             f.read_exact(&mut e_phoff)?;
-            pheader_offset = unpack::<4>(&e_phoff, &exec_endian);
+            pheader_offset = unpack!(e_phoff, u32, &exec_endian).into();
 
             let mut e_phentsize = [0; 2];
             // Skip e_shoff + e_flags + e_ehsize
             f.seek(SeekFrom::Current(4 + 4 + 2))?;
             f.read_exact(&mut e_phentsize)?;
-            pheader_size = unpack::<2>(&e_phentsize, &exec_endian).try_into().unwrap();
+            pheader_size = unpack!(e_phentsize, u16, &exec_endian);
         }
         ELFClass::ELFCLASS64 => {
             let mut e_phoff = [0; 8];
             // Skip e_version + e_entry
             f.seek(SeekFrom::Current(4 + 8))?;
             f.read_exact(&mut e_phoff)?;
-            pheader_offset = unpack::<8>(&e_phoff, &exec_endian);
+            pheader_offset = unpack!(e_phoff, u64, &exec_endian);
 
             let mut e_phentsize = [0; 2];
             // Skip e_shoff + e_flags + e_ehsize
             f.seek(SeekFrom::Current(8 + 4 + 2))?;
             f.read_exact(&mut e_phentsize)?;
-            pheader_size = unpack::<2>(&e_phentsize, &exec_endian).try_into().unwrap();
+            pheader_size = unpack!(e_phentsize, u16, &exec_endian);
         }
     }
 
     let ph_num: u16;
     let mut e_phnum = [0; 2];
     f.read_exact(&mut e_phnum)?;
-    ph_num = unpack::<2>(&e_phnum, &exec_endian).try_into().unwrap();
+    ph_num = unpack!(e_phnum, u16, &exec_endian);
 
     // Traverse all program headers and find the type with PT_INTERP
     const PT_INTERP: u32 = 3;
@@ -282,7 +269,7 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     while i < ph_num {
         f.read_exact(&mut p_type)?;
 
-        header_type = unpack::<4>(&p_type, &exec_endian).try_into().unwrap();
+        header_type = unpack!(p_type, u32, &exec_endian);
 
         if header_type == PT_INTERP {
             match exec_class {
@@ -291,14 +278,14 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                     // Skip p_offset
                     f.seek(SeekFrom::Current(4))?;
                     f.read_exact(&mut p_vaddr)?;
-                    let virtual_addr: u32 = unpack::<4>(&p_vaddr, &exec_endian).try_into().unwrap();
+                    let virtual_addr: u32 = unpack!(p_vaddr, u32, &exec_endian);
 
                     let mut p_filesz = [0; 4];
                     let mut interpreter_size: u32;
                     // Skip p_vaddr + p_paddr
                     f.seek(SeekFrom::Current(4 + 4))?;
                     f.read_exact(&mut p_filesz)?;
-                    interpreter_size = unpack::<4>(&p_filesz, &exec_endian).try_into().unwrap();
+                    interpreter_size = unpack!(p_filesz, u32, &exec_endian);
 
                     // interpreter is null terminated
                     interpreter_size -= 1;
@@ -316,14 +303,14 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                     // Skip p_flags + p_offset
                     f.seek(SeekFrom::Current(4 + 8))?;
                     f.read_exact(&mut p_vaddr)?;
-                    let virtual_addr: u64 = unpack::<8>(&p_vaddr, &exec_endian);
+                    let virtual_addr: u64 = unpack!(p_vaddr, u64, &exec_endian);
 
                     let mut p_filesz = [0; 8];
                     let mut interpreter_size: u64;
                     // Skip p_paddr
                     f.seek(SeekFrom::Current(8))?;
                     f.read_exact(&mut p_filesz)?;
-                    interpreter_size = unpack::<8>(&p_filesz, &exec_endian);
+                    interpreter_size = unpack!(p_filesz, u64, &exec_endian);
 
                     // interpreter is null terminated
                     interpreter_size -= 1;
