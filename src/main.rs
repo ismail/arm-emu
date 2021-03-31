@@ -233,9 +233,6 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     f.read_exact(&mut e_phnum)?;
     ph_num = unpack!(e_phnum, u16, &exec_endian);
 
-    // Traverse all program headers and find the type with PT_INTERP
-    const PT_INTERP: u32 = 3;
-
     /*
     typedef struct {
         uint32_t   p_type;
@@ -265,6 +262,9 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     let mut header_type: u32;
     let mut p_type = [0; 4];
     let mut exec_loader: String = String::new();
+
+    // Traverse all program headers and find the type with PT_INTERP
+    const PT_INTERP: u32 = 3;
 
     while i < ph_num {
         f.read_exact(&mut p_type)?;
