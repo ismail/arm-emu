@@ -76,7 +76,7 @@ fn run_executable(executable: Executable, args: &[String]) {
         Machine::X86_64 => "x86_64",
     };
 
-    // On Ubuntu executables are name qemu-<arch>-static
+    // On Ubuntu executables are named as qemu-<arch>-static
     let mut static_suffix: &str = "";
     let qemu_static_path = format!("/usr/bin/qemu-{}-static", qemu_suffix);
     if Path::new(&qemu_static_path).exists() {
