@@ -100,9 +100,10 @@ fn run_executable(executable: Executable, args: &[String]) {
         if !Path::new(&loader).exists() {
             panic!(
                 "{} does not exist, {} is not setup correctly.",
-                executable.loader, sysroot
+                loader, sysroot
             );
         }
+        println!("Loader: {:?}", loader);
 
         Command::new(format!("/usr/bin/qemu-{}{}", qemu_suffix, static_suffix))
             .arg(format!("{}/{}", sysroot, &executable.loader))
@@ -149,21 +150,24 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     // https://man7.org/linux/man-pages/man5/elf.5.html
     //  #define EI_NIDENT 16
 
-    // typedef struct {
-    //      unsigned char e_ident[EI_NIDENT];
-    //      uint16_t      e_type;
-    //      uint16_t      e_machine;
-    //      uint32_t      e_version;
-    //      ElfN_Addr     e_entry; (uint32_t or uint64_t)
-    //      ElfN_Off      e_phoff; (uint32_t or uint64_t)
-    //      uint32_t      e_flags;
-    //      uint16_t      e_ehsize;
-    //      uint16_t      e_phentsize;
-    //      uint16_t      e_phnum;
-    //      uint16_t      e_shentsize;
-    //      uint16_t      e_shnum;
-    //      uint16_t      e_shstrndx;
-    // } ElfN_Ehdr;
+    /*
+       typedef struct {
+       unsigned char e_ident[EI_NIDENT];
+            uint16_t      e_type;
+            uint16_t      e_machine;
+            uint32_t      e_version;
+            ElfN_Addr     e_entry;
+            ElfN_Off      e_phoff;
+            ElfN_Off      e_shoff;
+            uint32_t      e_flags;
+            uint16_t      e_ehsize;
+            uint16_t      e_phentsize;
+            uint16_t      e_phnum;
+            uint16_t      e_shentsize;
+            uint16_t      e_shnum;
+            uint16_t      e_shstrndx;
+        } ElfN_Ehdr;
+    */
 
     let mut e_ident = [0; 16];
 
@@ -196,101 +200,105 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
         )
     });
 
-    let pheader_offset: u64;
-    let pheader_size: u16;
+    let sheader_offset: u64;
+    let sheader_size: u16;
 
     match exec_class {
         ELFClass::ELFCLASS32 => {
-            let mut e_phoff = [0; 4];
-            // Skip e_version + e_entry
-            f.seek(SeekFrom::Current(4 + 4))?;
-            f.read_exact(&mut e_phoff)?;
-            pheader_offset = unpack!(e_phoff, u32, &exec_endian).into();
+            let mut e_shoff = [0; 4];
+            // Skip e_version + e_entry + e_phoff
+            f.seek(SeekFrom::Current(4 + 4 + 4))?;
+            f.read_exact(&mut e_shoff)?;
+            sheader_offset = unpack!(e_shoff, u32, &exec_endian).into();
 
-            let mut e_phentsize = [0; 2];
-            // Skip e_shoff + e_flags + e_ehsize
-            f.seek(SeekFrom::Current(4 + 4 + 2))?;
-            f.read_exact(&mut e_phentsize)?;
-            pheader_size = unpack!(e_phentsize, u16, &exec_endian);
+            let mut e_shentsize = [0; 2];
+            // Skip e_flags + e_ehsize + e_phentsize + e_phnum
+            f.seek(SeekFrom::Current(4 + 2 + 2 + 2))?;
+            f.read_exact(&mut e_shentsize)?;
+            sheader_size = unpack!(e_shentsize, u16, &exec_endian);
         }
         ELFClass::ELFCLASS64 => {
-            let mut e_phoff = [0; 8];
-            // Skip e_version + e_entry
-            f.seek(SeekFrom::Current(4 + 8))?;
-            f.read_exact(&mut e_phoff)?;
-            pheader_offset = unpack!(e_phoff, u64, &exec_endian);
+            let mut e_shoff = [0; 8];
+            // Skip e_version + e_entry + e_phoff
+            f.seek(SeekFrom::Current(4 + 8 + 8))?;
+            f.read_exact(&mut e_shoff)?;
+            sheader_offset = unpack!(e_shoff, u64, &exec_endian);
 
-            let mut e_phentsize = [0; 2];
-            // Skip e_shoff + e_flags + e_ehsize
-            f.seek(SeekFrom::Current(8 + 4 + 2))?;
-            f.read_exact(&mut e_phentsize)?;
-            pheader_size = unpack!(e_phentsize, u16, &exec_endian);
+            let mut e_shentsize = [0; 2];
+            // Skip e_flags + e_ehsize + e_phentsize + e_phnum
+            f.seek(SeekFrom::Current(4 + 2 + 2 + 2))?;
+            f.read_exact(&mut e_shentsize)?;
+            sheader_size = unpack!(e_shentsize, u16, &exec_endian);
         }
     }
 
-    let ph_num: u16;
-    let mut e_phnum = [0; 2];
-    f.read_exact(&mut e_phnum)?;
-    ph_num = unpack!(e_phnum, u16, &exec_endian);
+    let sh_num: u16;
+    let mut e_shnum = [0; 2];
+    f.read_exact(&mut e_shnum)?;
+    sh_num = unpack!(e_shnum, u16, &exec_endian);
 
     /*
-    typedef struct {
-        uint32_t   p_type;
-        Elf32_Off  p_offset;
-        Elf32_Addr p_vaddr;
-        Elf32_Addr p_paddr;
-        uint32_t   p_filesz;
-        uint32_t   p_memsz;
-        uint32_t   p_flags;
-        uint32_t   p_align;
-    } Elf32_Phdr;
+     typedef struct {
+        uint32_t   sh_name;
+        uint32_t   sh_type;
+        uint32_t   sh_flags;
+        Elf32_Addr sh_addr;
+        Elf32_Off  sh_offset;
+        uint32_t   sh_size;
+        uint32_t   sh_link;
+        uint32_t   sh_info;
+        uint32_t   sh_addralign;
+        uint32_t   sh_entsize;
+      } Elf32_Shdr;
 
-    typedef struct {
-        uint32_t   p_type;
-        uint32_t   p_flags;
-        Elf64_Off  p_offset;
-        Elf64_Addr p_vaddr;
-        Elf64_Addr p_paddr;
-        uint64_t   p_filesz;
-        uint64_t   p_memsz;
-        uint64_t   p_align;
-    } Elf64_Phdr;
+      typedef struct {
+        uint32_t   sh_name;
+        uint32_t   sh_type;
+        uint64_t   sh_flags;
+        Elf64_Addr sh_addr;
+        Elf64_Off  sh_offset;
+        uint64_t   sh_size;
+        uint32_t   sh_link;
+        uint32_t   sh_info;
+        uint64_t   sh_addralign;
+        uint64_t   sh_entsize;
+        } Elf64_Shdr;
     */
 
-    f.seek(SeekFrom::Start(pheader_offset))?;
+    f.seek(SeekFrom::Start(sheader_offset))?;
     let mut i = 0;
     let mut header_type: u32;
-    let mut p_type = [0; 4];
+    let mut sh_type = [0; 4];
     let mut exec_loader: String = String::new();
 
-    // Traverse all program headers and find the type with PT_INTERP
-    const PT_INTERP: u32 = 3;
+    // Look for sh_type == SHT_PROGBITS
+    const SHT_PROGBITS: u32 = 1;
 
-    while i < ph_num {
-        f.read_exact(&mut p_type)?;
+    while i < sh_num {
+        // Skip sh_name
+        f.seek(SeekFrom::Current(4))?;
+        f.read_exact(&mut sh_type)?;
 
-        header_type = unpack!(p_type, u32, &exec_endian);
+        header_type = unpack!(sh_type, u32, &exec_endian);
 
-        if header_type == PT_INTERP {
+        if header_type == SHT_PROGBITS {
             match exec_class {
                 ELFClass::ELFCLASS32 => {
-                    let mut p_vaddr = [0; 4];
-                    // Skip p_offset
-                    f.seek(SeekFrom::Current(4))?;
-                    f.read_exact(&mut p_vaddr)?;
-                    let virtual_addr: u32 = unpack!(p_vaddr, u32, &exec_endian);
-
-                    let mut p_filesz = [0; 4];
-                    let mut interpreter_size: u32;
-                    // Skip p_vaddr + p_paddr
+                    let mut sh_offset = [0; 4];
+                    // Skip sh_flags + sh_addr
                     f.seek(SeekFrom::Current(4 + 4))?;
-                    f.read_exact(&mut p_filesz)?;
-                    interpreter_size = unpack!(p_filesz, u32, &exec_endian);
+                    f.read_exact(&mut sh_offset)?;
+                    let offset: u32 = unpack!(sh_offset, u32, &exec_endian);
+
+                    let mut sh_size = [0; 4];
+                    let mut interpreter_size: u32;
+                    f.read_exact(&mut sh_size)?;
+                    interpreter_size = unpack!(sh_size, u32, &exec_endian);
 
                     // interpreter is null terminated
                     interpreter_size -= 1;
 
-                    f.seek(SeekFrom::Start(virtual_addr as u64))?;
+                    f.seek(SeekFrom::Start(offset as u64))?;
                     let mut interpreter: Vec<u8> = Vec::with_capacity(interpreter_size as usize);
                     f.take(interpreter_size as u64)
                         .read_to_end(&mut interpreter)?;
@@ -299,23 +307,21 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                     //println!("Loader: {}", exec_loader);
                 }
                 ELFClass::ELFCLASS64 => {
-                    let mut p_vaddr = [0; 8];
-                    // Skip p_flags + p_offset
-                    f.seek(SeekFrom::Current(4 + 8))?;
-                    f.read_exact(&mut p_vaddr)?;
-                    let virtual_addr: u64 = unpack!(p_vaddr, u64, &exec_endian);
+                    let mut sh_offset = [0; 8];
+                    // Skip sh_flags + sh_addr
+                    f.seek(SeekFrom::Current(8 + 8))?;
+                    f.read_exact(&mut sh_offset)?;
+                    let offset: u64 = unpack!(sh_offset, u64, &exec_endian);
 
-                    let mut p_filesz = [0; 8];
+                    let mut sh_size = [0; 8];
                     let mut interpreter_size: u64;
-                    // Skip p_paddr
-                    f.seek(SeekFrom::Current(8))?;
-                    f.read_exact(&mut p_filesz)?;
-                    interpreter_size = unpack!(p_filesz, u64, &exec_endian);
+                    f.read_exact(&mut sh_size)?;
+                    interpreter_size = unpack!(sh_size, u64, &exec_endian);
 
                     // interpreter is null terminated
                     interpreter_size -= 1;
 
-                    f.seek(SeekFrom::Start(virtual_addr))?;
+                    f.seek(SeekFrom::Start(offset))?;
                     let mut interpreter: Vec<u8> = Vec::with_capacity(interpreter_size as usize);
                     f.take(interpreter_size).read_to_end(&mut interpreter)?;
 
@@ -326,8 +332,8 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
             break;
         }
 
-        // Already read p_type (uint32_t) bytes
-        f.seek(SeekFrom::Current((pheader_size as i64) - 4))?;
+        // Already read sh_name and sh_type
+        f.seek(SeekFrom::Current((sheader_size as i64) - 4 - 4))?;
         i += 1;
     }
 
