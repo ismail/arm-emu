@@ -261,75 +261,105 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
     let mut i = 0;
     let mut header_type: u32;
     let mut p_type = [0; 4];
+    let mut load_address: u64 = 0;
+    let mut load_flags: u32;
+    let mut virtual_address: u64 = 0;
+    let mut interpreter_size: u64 = 0;
     let mut exec_loader: String = String::new();
 
-    // Traverse all program headers and find the type with PT_INTERP
+    const PT_LOAD: u32 = 1;
     const PT_INTERP: u32 = 3;
+
+    const PF_X: u32 = 1 << 0;
+    const PF_R: u32 = 1 << 2;
+    const PF_RX: u32 = PF_R | PF_X;
 
     while i < ph_num {
         f.read_exact(&mut p_type)?;
 
         header_type = unpack!(p_type, u32, &exec_endian);
 
-        if header_type == PT_INTERP {
+        if header_type == PT_LOAD {
+            let mut p_flags = [0; 4];
+
             match exec_class {
                 ELFClass::ELFCLASS32 => {
                     let mut p_vaddr = [0; 4];
                     // Skip p_offset
                     f.seek(SeekFrom::Current(4))?;
                     f.read_exact(&mut p_vaddr)?;
-                    let virtual_addr: u32 = unpack!(p_vaddr, u32, &exec_endian);
+                    let load_address_maybe: u32 = unpack!(p_vaddr, u32, &exec_endian);
+                    // Skip p_paddr + p_filesz + p_memsz
+                    f.seek(SeekFrom::Current(4 + 4 + 4))?;
+                    f.read_exact(&mut p_flags)?;
+                    load_flags = unpack!(p_flags, u32, &exec_endian);
+
+                    if load_flags == PF_RX {
+                        load_address = load_address_maybe.into();
+                    }
+                }
+                ELFClass::ELFCLASS64 => {
+                    let mut p_vaddr = [0; 8];
+                    f.read_exact(&mut p_flags)?;
+                    load_flags = unpack!(p_flags, u32, &exec_endian);
+
+                    // Skip p_offset
+                    f.seek(SeekFrom::Current(8))?;
+                    f.read_exact(&mut p_vaddr)?;
+                    let load_address_maybe: u64 = unpack!(p_vaddr, u64, &exec_endian);
+
+                    if load_flags == PF_RX {
+                        load_address = load_address_maybe;
+                    }
+                }
+            }
+        } else if header_type == PT_INTERP {
+            match exec_class {
+                ELFClass::ELFCLASS32 => {
+                    let mut p_vaddr = [0; 4];
+                    // Skip p_offset
+                    f.seek(SeekFrom::Current(4))?;
+                    f.read_exact(&mut p_vaddr)?;
+                    virtual_address = unpack!(p_vaddr, u32, &exec_endian).into();
 
                     let mut p_filesz = [0; 4];
-                    let mut interpreter_size: u32;
                     // Skip p_vaddr + p_paddr
                     f.seek(SeekFrom::Current(4 + 4))?;
                     f.read_exact(&mut p_filesz)?;
-                    interpreter_size = unpack!(p_filesz, u32, &exec_endian);
-
-                    // interpreter is null terminated
-                    interpreter_size -= 1;
-
-                    f.seek(SeekFrom::Start(virtual_addr as u64))?;
-                    let mut interpreter: Vec<u8> = Vec::with_capacity(interpreter_size as usize);
-                    f.take(interpreter_size as u64)
-                        .read_to_end(&mut interpreter)?;
-
-                    exec_loader = str::from_utf8(&interpreter).unwrap().to_string();
-                    //println!("Loader: {}", exec_loader);
+                    interpreter_size = unpack!(p_filesz, u32, &exec_endian).into();
                 }
                 ELFClass::ELFCLASS64 => {
                     let mut p_vaddr = [0; 8];
                     // Skip p_flags + p_offset
                     f.seek(SeekFrom::Current(4 + 8))?;
                     f.read_exact(&mut p_vaddr)?;
-                    let virtual_addr: u64 = unpack!(p_vaddr, u64, &exec_endian);
+                    virtual_address = unpack!(p_vaddr, u64, &exec_endian);
 
                     let mut p_filesz = [0; 8];
-                    let mut interpreter_size: u64;
                     // Skip p_paddr
                     f.seek(SeekFrom::Current(8))?;
                     f.read_exact(&mut p_filesz)?;
                     interpreter_size = unpack!(p_filesz, u64, &exec_endian);
-
-                    // interpreter is null terminated
-                    interpreter_size -= 1;
-
-                    f.seek(SeekFrom::Start(virtual_addr))?;
-                    let mut interpreter: Vec<u8> = Vec::with_capacity(interpreter_size as usize);
-                    f.take(interpreter_size).read_to_end(&mut interpreter)?;
-
-                    exec_loader = str::from_utf8(&interpreter).unwrap().to_string();
-                    //println!("Loader: {}", exec_loader);
                 }
             }
-            break;
         }
 
-        // Already read p_type (uint32_t) bytes
-        f.seek(SeekFrom::Current((pheader_size as i64) - 4))?;
         i += 1;
+        f.seek(SeekFrom::Start(pheader_offset + (i * pheader_size) as u64))?;
     }
+
+    if interpreter_size != 0 {
+        // interpreter is null terminated
+        interpreter_size -= 1;
+
+        f.seek(SeekFrom::Start(virtual_address - load_address))?;
+        let mut interpreter: Vec<u8> = Vec::with_capacity(interpreter_size as usize);
+        f.take(interpreter_size).read_to_end(&mut interpreter)?;
+
+        exec_loader = str::from_utf8(&interpreter).unwrap().to_string();
+    }
+
+    //println!("Loader: {}", exec_loader);
 
     let exec = Executable {
         class: exec_class,
