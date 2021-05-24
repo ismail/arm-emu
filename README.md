@@ -47,4 +47,4 @@ ismail@:/home/ismail>
 ### Creating sysroots
 
 See https://github.com/ismail/hacks/blob/master/sysrooter.sh for a script for creating
-openSUSE Tumbleweed based sysroots.
+openSUSE Leap/Tumbleweed based sysroots.
