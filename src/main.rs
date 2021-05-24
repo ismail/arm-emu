@@ -302,8 +302,9 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                     f.read_exact(&mut p_flags)?;
                     load_flags = unpack!(p_flags, u32, &exec_endian);
 
-                    if load_flags == PF_RX {
+                    if load_flags == PF_R || load_flags == PF_RX {
                         load_address = load_address_maybe.into();
+                        break;
                     }
                 }
                 ELFClass::ELFCLASS64 => {
@@ -316,8 +317,9 @@ fn setup_executable(executable: &str) -> Result<Executable, io::Error> {
                     f.read_exact(&mut p_vaddr)?;
                     let load_address_maybe: u64 = unpack!(p_vaddr, u64, &exec_endian);
 
-                    if load_flags == PF_RX {
+                    if load_flags == PF_R || load_flags == PF_RX {
                         load_address = load_address_maybe;
+                        break;
                     }
                 }
             }
