@@ -105,6 +105,10 @@ fn run_executable(executable: Executable, args: &[String]) {
         }
 
         Command::new(format!("/usr/bin/qemu-{}{}", qemu_suffix, static_suffix))
+            .arg("-R")
+            .arg("0xf7000000")
+            .arg("-cpu")
+            .arg("max")
             .arg(format!("{}/{}", sysroot, &executable.loader))
             .arg("--library-path")
             .arg(format!(
@@ -132,6 +136,10 @@ fn run_executable(executable: Executable, args: &[String]) {
         }
 
         Command::new(format!("/usr/bin/qemu-{}{}", qemu_suffix, static_suffix))
+            .arg("-R")
+            .arg("0xf7000000")
+            .arg("-cpu")
+            .arg("max")
             .args(&args[1..])
             .status()
             .unwrap_or_else(|_| {
