@@ -8,5 +8,5 @@ edition = "2021"
 num_enum = "0.5"
 
 [profile.release]
-lto = true
+lto = 'thin'
 panic = 'abort'
